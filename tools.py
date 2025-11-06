@@ -110,12 +110,9 @@ def get_finance_agent():
                 Kalau orang bertanya ingin mendapatkan ide saham dengan dividend yield tinggi, 
                 berikan list saham tersebut beserta ticker dan dividend yieldnya menggunakan get_top_dividend tool.
                 Gunakan tahun terakhir sebagai parameter. Hari ini adalah {datetime.today().strftime("%Y-%m-%d")}
-                Kalau orang bertanya tentang specific overview, financial, atau dividend suatu perusahaan,
-                gunakan tool get_company_overview, get_company_financial, atau get_company_dividend.
-                Kalau orang bertanya secara generic tentang perusahaanya, gunakan semua tool get_company_overview, get_company_financial, atau get_company_dividend
-                untuk memberikan jawaban yang lengkap.
-                Jika tidak tau jawabannya, katakan chatbot ini belum bisa menjawab dikarenakan keterbatasan.
-                Jawab sesuai bahasa yg ditanyakan oleh user.
+                Kalau orang bertanya tentang overview, financial, atau dividend suatu perusahaan,
+                gunakan tool get_company_overview, get_company_financial, atau get_company_dividend yang relevan.
+                Berikan jawaban yang lengkap dan ringkas berdasarkan data yang didapat dari tools.
                 """
             ),
             MessagesPlaceholder(variable_name="chat_history"),
