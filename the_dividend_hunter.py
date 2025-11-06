@@ -1,82 +1,150 @@
-import streamlit as st
-from tools import get_finance_agent
-from langchain_community.chat_message_histories import StreamlitChatMessageHistory
+import json
+import requests
 from datetime import datetime
+import streamlit as st
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_groq import ChatGroq
+from langchain_core.tools import tool
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.runnables.history import RunnableWithMessageHistory
+from langchain_community.chat_message_histories import StreamlitChatMessageHistory
+from typing import List
+
+SECTORS_API_KEY = st.secrets["SECTORS_API_KEY"]
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
 
 
-st.set_page_config(
-    page_title="Financial Assistant Chatbot with LLM Agents and RAG",
-    page_icon="🪙"
-)
-
-st.subheader("Financial Assistant Chatbot with LLM Agents and RAG", divider='blue')
-
-
-##### ------ 🔁 Managing Chat Sessions
-
-if "selectbox_selection" not in st.session_state:
-    st.session_state['selectbox_selection'] = ["Default Chat"]
-
-selectbox_selection = st.session_state['selectbox_selection']
-
-if st.sidebar.button("✍️ Create New Chat", use_container_width=True):
-    selectbox_selection.append(f"New Chat - {datetime.now().strftime('%H:%M:%S')}")
-
-session_id = st.sidebar.selectbox("Chats", options=selectbox_selection, index=len(selectbox_selection)-1)
-
-
-
-##### -------- About
-st.sidebar.markdown("---")
-st.sidebar.markdown("#")
-st.sidebar.markdown('''
-                    
-ℹ️ **About**
-
-Financial Assistant Chatbot with LLM Agents and RAG is an app that helps you get clear, accurate answers to your financial questions. 
-Just type your question, and the assistant will provide smart, helpful responses in real time.
-                    
-🛠️ **Features**
-                    
-- 🏢 Company Overview
-                    
-    Gives information about any company, including sector, financial metrics, and other facts.
-                                    
-- 🔍 Top Companies by Transaction Volume
-                    
-    Shows a list of companies with the highest transaction volume over a specific period.
-
-- 📆 Daily Transactions Summary
-                    
-    Provides a day-by-day breakdown of total transactions, helping to track market activity trends.
-
-- 📊 Top Ranked Companies
-                    
-    Displays companies ranked by key metrics (dividend yield, total dividend, revenue, earnings, market cap).
-                    
-''')
-
-
-
-
-
-### --------- 🕒 Displaying Chat History
-
-chat_history = StreamlitChatMessageHistory(key=session_id)
-
-for message in chat_history.messages:
-    with st.chat_message(message.type):
-        st.markdown(message.content)
-
-
-### --- Chat Interface
-prompt = st.chat_input("Ask your question here!")
-agent = get_finance_agent()
-
-if prompt: 
-    with st.chat_message("human"):
-        st.markdown(prompt)
+def retrieve_from_endpoint(url: str) -> dict:
+    """
+    A robust, reusable helper function to perform GET requests.
+    """
     
-    with st.chat_message("ai"):
-        response = agent.invoke({"input": prompt}, config={"configurable": {"session_id": session_id}})
-        st.markdown(response['output'])
+    headers = {"Authorization": SECTORS_API_KEY}
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+
+        data = response.json()
+
+        return data
+
+    except requests.exceptions.HTTPError as err:
+        return {
+            "error": f"HTTPError {err.response.status_code} - {err.response.reason}",
+            "url": url,
+            "detail": err.response.text
+        }
+    
+    except Exception as e:
+        return {
+            "error": f"Unexpected error: {type(e).__name__} - {str(e)}",
+            "url": url
+        }
+
+@tool
+def get_top_dividend(year: str) -> dict:
+    """
+    Tool untuk mengambil perusahaan dengan dividend yield tertinggi. 
+    Dividend yield yg diambil perlu dikonversikan ke dalam persentase, contoh: 0.5 artinya 50%.
+    @param year: Tahun untuk mengambil data dividend yield, selalu isi dengan tahun terakhir.
+    """
+
+    url = f"https://api.sectors.app/v1/companies/top/?classifications=dividend_yield&n_stock=10&year={year}&include_none=false"
+    
+    return retrieve_from_endpoint(url)
+
+@tool
+def get_company_overview(ticker: str) -> dict:
+    """
+    Tool untuk memberikan overview perusahaan.
+    Overview perusahaan meliputi informasi umum, ringkasan bisnis, dan data keuangan utama.
+    """
+
+    url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=overview"
+    
+    return retrieve_from_endpoint(url)
+
+@tool
+def get_company_financial(ticker: str) -> dict:
+    """
+    Tool untuk memberikan data finansial perusahaan.
+    Perlu menunjukan tren keuangan terutama revenue, earnings dan free cash flow.
+    Tunjukan juga growth atau stabilitas dari data keuangan tersebut.
+    """
+
+    url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=financials"
+    
+    return retrieve_from_endpoint(url)
+
+@tool
+def get_company_dividend(ticker: str) -> dict:
+    """
+    Tool untuk memberikan data dividend perusahaan.
+    Tunjukan stabilitas atau growth dividend payout dari perusahaan tersebut.
+    Analisa juga payout ratio jika memungkinkan.
+    """
+
+    url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=dividend"
+    
+    return retrieve_from_endpoint(url)
+
+def get_finance_agent():
+
+    # Defined Tools
+    tools = [
+        get_top_dividend,
+        get_company_overview,
+        get_company_financial,
+        get_company_dividend,
+    ]
+
+    # Create the Prompt Template
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                f"""
+                Kamu adalah asisten cerdas yang menjawab pertanyaan terkait dividend saham secara faktual.
+                Kalau orang bertanya ingin mendapatkan ide saham dengan dividend yield tinggi, 
+                berikan list saham tersebut beserta ticker dan dividend yieldnya menggunakan get_top_dividend tool.
+                Gunakan tahun terakhir sebagai parameter. Hari ini adalah {datetime.today().strftime("%Y-%m-%d")}
+                Kalau orang bertanya tentang specific overview, financial, atau dividend suatu perusahaan,
+                gunakan tool get_company_overview, get_company_financial, atau get_company_dividend.
+                Kalau orang bertanya secara generic tentang perusahaanya, gunakan semua tool get_company_overview, get_company_financial, atau get_company_dividend
+                untuk memberikan jawaban yang lengkap.
+                Jika tidak tau jawabannya, katakan chatbot ini belum bisa menjawab dikarenakan keterbatasan.
+                Jawab sesuai bahasa yg ditanyakan oleh user.
+                """
+            ),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+            MessagesPlaceholder("agent_scratchpad"),
+        ]
+    )
+
+    # Initializing the LLM
+    llm = ChatGroq(
+        temperature=0,
+        model_name="llama-3.3-70b-versatile",
+        groq_api_key=GROQ_API_KEY,
+    )
+
+    # Create the Agent and AgentExecutor
+    agent = create_tool_calling_agent(llm, tools, prompt)
+    agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+
+    # Add Memory to the AgentExecutor
+    def get_session_history(session_id: str):
+
+        return StreamlitChatMessageHistory(key=session_id)
+    
+    agent_with_memory = RunnableWithMessageHistory(
+        agent_executor,
+        get_session_history,
+        input_messages_key="input",
+        history_messages_key="chat_history",
+    )
+
+    return agent_with_memory
