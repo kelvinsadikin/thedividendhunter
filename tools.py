@@ -46,7 +46,8 @@ def retrieve_from_endpoint(url: str) -> dict:
 @tool
 def get_top_dividend(year: str) -> dict:
     """
-    Tool untuk mengambil perusahaan dengan dividend yield tertinggi.
+    Tool untuk mengambil perusahaan dengan dividend yield tertinggi. 
+    Dividend yield yg diambil perlu dikonversikan ke dalam persentase, contoh: 0.5 artinya 50%.
     @param year: Tahun untuk mengambil data dividend yield, selalu isi dengan tahun terakhir.
     """
 
@@ -56,7 +57,10 @@ def get_top_dividend(year: str) -> dict:
 
 @tool
 def get_company_overview(ticker: str) -> dict:
-    """Tool untuk memberikan overview perusahaan."""
+    """
+    Tool untuk memberikan overview perusahaan.
+    Overview perusahaan meliputi informasi umum, ringkasan bisnis, dan data keuangan utama.
+    """
 
     url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=overview"
     
@@ -64,7 +68,11 @@ def get_company_overview(ticker: str) -> dict:
 
 @tool
 def get_company_financial(ticker: str) -> dict:
-    """Tool untuk memberikan data finansial perusahaan."""
+    """
+    Tool untuk memberikan data finansial perusahaan.
+    Perlu menunjukan tren keuangan terutama revenue, earnings dan free cash flow.
+    Tunjukan juga growth atau stabilitas dari data keuangan tersebut.
+    """
 
     url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=financials"
     
@@ -72,7 +80,11 @@ def get_company_financial(ticker: str) -> dict:
 
 @tool
 def get_company_dividend(ticker: str) -> dict:
-    """Tool untuk memberikan data dividend perusahaan."""
+    """
+    Tool untuk memberikan data dividend perusahaan.
+    Tunjukan stabilitas atau growth dividend payout dari perusahaan tersebut.
+    Analisa juga payout ratio jika memungkinkan.
+    """
 
     url = f"https://api.sectors.app/v1/company/report/{ticker}/?sections=dividend"
     
@@ -98,8 +110,12 @@ def get_finance_agent():
                 Kalau orang bertanya ingin mendapatkan ide saham dengan dividend yield tinggi, 
                 berikan list saham tersebut beserta ticker dan dividend yieldnya menggunakan get_top_dividend tool.
                 Gunakan tahun terakhir sebagai parameter. Hari ini adalah {datetime.today().strftime("%Y-%m-%d")}
-                Kalau orang bertanya tentang overview, financial, atau dividend suatu perusahaan,
-                gunakan tool get_company_overview, get_company_financial, atau get_company_dividend sesuai kebutuhan.
+                Kalau orang bertanya tentang specific overview, financial, atau dividend suatu perusahaan,
+                gunakan tool get_company_overview, get_company_financial, atau get_company_dividend.
+                Kalau orang bertanya secara generic tentang perusahaanya, gunakan semua tool get_company_overview, get_company_financial, atau get_company_dividend
+                untuk memberikan jawaban yang lengkap.
+                Jika tidak tau jawabannya, katakan chatbot ini belum bisa menjawab dikarenakan keterbatasan.
+                Jawab sesuai bahasa yg ditanyakan oleh user.
                 """
             ),
             MessagesPlaceholder(variable_name="chat_history"),
